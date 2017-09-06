@@ -13,11 +13,17 @@ load_dotenv(join(dirname(__file__), '.env'))
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("destination", help="destination filename")
+    parser.add_argument("--key", help="zoom api key")
+    parser.add_argument("--secret", help="zoom api secret")
+    parser.add_argument("--destination", help="destination filename")
     args = parser.parse_args()
 
-    KEY = getenv('ZOOM_KEY')
-    SECRET = getenv('ZOOM_SECRET')
+    if args.key is None:
+        KEY = getenv('ZOOM_KEY')
+
+    if args.secret is None:
+        SECRET = getenv('ZOOM_SECRET')
+
     FILENAME = args.destination
     MEETINGS = "https://api.zoom.us/v1/metrics/meetings"
 
