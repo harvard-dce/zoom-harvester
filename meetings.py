@@ -4,17 +4,20 @@ import requests
 import time
 from datetime import datetime
 from datetime import timedelta
+from os import getenv
+from os.path import dirname, join
+
+from dotenv import load_dotenv
+load_dotenv(join(dirname(__file__), '.env'))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("key", help="zoom api key")
-    parser.add_argument("secret", help="zoom api secret")
     parser.add_argument("destination", help="destination filename")
     args = parser.parse_args()
 
-    KEY = args.key
-    SECRET = args.secret
+    KEY = getenv('ZOOM_KEY')
+    SECRET = getenv('ZOOM_SECRET')
     FILENAME = args.destination
     MEETINGS = "https://api.zoom.us/v1/metrics/meetings"
 
@@ -55,6 +58,8 @@ def main():
             for meeting in response['meetings']:
                 meeting['type'] = response['type']
                 destination.write(str(meeting))
+
+            print("total", type, "meetings:", response['total_records'])
 
             remaining_pages = response['page_count'] - response['page_number']
 
