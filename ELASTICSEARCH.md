@@ -33,3 +33,9 @@ Try indexing a document to make sure things are working
 Go to http://localhost:9200/_plugin/kopf to confirm that the `movies` index was created with 1 doc
 
 Stop the container and start it again (remember to reinstall kopf), and check that the `movies` index is still there.
+
+### index templates
+
+example:
+
+    curl -XPUT "http://localhost:9200/_template/sessions" -d @index_templates/sessions.json
