@@ -52,7 +52,7 @@ def fetch_records(report_url, params, wait=1):
     return pages
 
 
-def get_active_users(date):
+def get_active_hosts(date):
     params = {
         'from': date,
         'to': date,
@@ -64,13 +64,13 @@ def get_active_users(date):
 
     pages = fetch_records("/report/getaccountreport", params)
 
-    active_user_ids = []
+    active_host_ids = []
 
     for page in pages:
         for user in page['users']:
-            active_user_ids.append(user['user_id'])
+            active_host_ids.append(user['user_id'])
 
-    return active_user_ids
+    return active_host_ids
 
 
 def get_series_info(host_ids):
@@ -136,19 +136,19 @@ def get_meetings_from(date, key, secret):
         'page_number': 1
     }
 
-    host_ids = get_active_users(date)
+    host_ids = get_active_hosts(date)
     series_info = get_series_info(host_ids)
     meeting_uuids = get_meeting_uuids(date, key, secret)
 
-    for uuid in meeting_uuids:
-        params['meeting_id'] = uuid
+    for meeting_uuid in meeting_uuids:
+        params['meeting_id'] = meeting_uuid
         pages = fetch_records(url, params)
         topic = ""
         host_id = ""
 
         series_id = pages[0]['id']
         if series_id in series_info.keys():
-            topic = series_info[series_id]["topic"]
+            topic = series_info[series_id]['topic']
             host_id = series_info[series_id]['host_id']
 
         document = create_meeting_document(pages[0], topic, host_id)
@@ -156,15 +156,15 @@ def get_meetings_from(date, key, secret):
         es.index(
             index="meetings",
             doc_type="meeting",
-            id=uuid,  # unique meeting occurrence id
+            id=meeting_uuid,  # unique meeting occurrence id
             body=document
         )
 
         for page in pages:
             for session in page['participants']:
-                document = create_sessions_document(session, uuid)
+                document = create_sessions_document(session, meeting_uuid)
                 participant_sessions.append(document)
-                unique_session_id = uuid + session['user_id']
+                unique_session_id = meeting_uuid + session['user_id']
                 es.index(
                     index="sessions",
                     doc_type="session",
