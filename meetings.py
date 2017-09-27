@@ -162,10 +162,11 @@ def get_meetings_from(date, key, secret):
             for session in page['participants']:
                 document = create_sessions_document(session, uuid)
                 participant_sessions.append(document)
-                # no unique index for participants, can we let elasticsearch autogenerate one?
+                unique_session_id = uuid + session['user_id']
                 es.index(
                     index="sessions",
                     doc_type="session",
+                    id=unique_session_id,
                     body=document
                 )
 
