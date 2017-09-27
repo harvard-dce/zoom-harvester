@@ -2,11 +2,13 @@
 
 A python script for fetching Zoom meeting metadata using the Zoom API and loading data into Elasticsearch.
 
-#### Helpful Links
+## Helpful Links
+
 [Zoom API Documentation](https://zoom.github.io/api/)
+
 [Zoom API Playground](https://developer.zoom.us/playground/)
 
-#### API Terms
+## API Terms
 
 **meeting id**
 
@@ -24,11 +26,11 @@ Within the series_id, there can be several types:
 Since only hosts have accounts, most of the time user_id refers to a host. Participants are not required to have accounts and do not log in when they join a meeting but are generated temporary non-unique "user_ids."
 
 
-#### API Calls
+## API Calls
 
 | Call                       | Requires          | Returns |
-| -------------------------- |:-----------------:| :-------:            |
-| /report/getaccountreport/  | key/secret, dates | Active host information, including host ids.   |
-| /meeting/list/      | host ids      |  Meeting series data including topic and series id.  |
-| /metrics/meetings/ |       |  Meeting instance data, including unique meeting ids but not participant data. |
-| /metrics/meetingdetail/ | unique meeting ids |  All information from /metrics/meetings/ plus detailed participant data. |
+| -------------------------- |:-----------------:| :-------            |
+| /report/getaccountreport/  | date(s)           |  Active host information, including host ids.   |
+| /meeting/list/             | host ids          |  Meeting series data including topic and series id.  |
+| /metrics/meetings/         | date(s)           |  Meeting instance data, including unique meeting ids but not participant data. |
+| /metrics/meetingdetail/    | unique meeting ids |  All information from /metrics/meetings/ plus detailed participant data. |
