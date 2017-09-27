@@ -25,6 +25,10 @@ Within the series_id, there can be several types:
 
 Since only hosts have accounts, most of the time user_id refers to a host. Participants are not required to have accounts and do not log in when they join a meeting but are generated temporary non-unique "user_ids."
 
+**session/participant sessions**
+
+Each individual instance of a meeting participant entering and exiting a meeting. Can occur many times during the same meeting if, for example, the participant has a bad connection. Number of sessions for a given meeting does not equal the number of participants.
+
 
 ## API Calls
 
@@ -34,3 +38,5 @@ Since only hosts have accounts, most of the time user_id refers to a host. Parti
 | /meeting/list/             | host ids          |  Meeting series data including topic and series id.  |
 | /metrics/meetings/         | date(s)           |  Meeting instance data, including unique meeting ids but not participant data. |
 | /metrics/meetingdetail/    | unique meeting ids |  All information from /metrics/meetings/ plus detailed participant data. |
+
+meetings.py runs all these calls in order to generate meeting objects with topics and host ids and participant sessions documents
