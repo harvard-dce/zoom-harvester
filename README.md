@@ -8,11 +8,13 @@ A python script for fetching Zoom meeting metadata using the Zoom API and loadin
 
 [Zoom API Playground](https://developer.zoom.us/playground/)
 
-## API Terms
+## Terms
 
-**meeting id**
+**meeting id/meeting_uuid/series_id**
 
-To Zoom, meeting means both an individual instance of a meeting and a series of meetings. There are unique ids for each meeting instance, and series ids that can remain static for a series of reoccuring meetings. The Zoom API docmentation refers to both types of ids as "meeting id". We will refer to those as _meeting_uuid/unique_meeting_id_, and _series_id_.
+To Zoom, meeting means both an individual instance of a meeting and a series of meetings. There are unique ids for each meeting instance, and series ids that can remain static for a series of reoccuring meetings. The Zoom API docmentation refers to both types of ids as "meeting id". We will refer to those as _meeting_uuid (individual meetings), and _series_id_(series of meetings).
+
+_**More notes on meetings:**_
 
 Within the series_id, there can be several types:
 - Most Common:
@@ -29,6 +31,10 @@ Since only hosts have accounts, most of the time user_id refers to a host. Parti
 
 Each individual instance of a meeting participant entering and exiting a meeting. Can occur many times during the same meeting if, for example, the participant has a bad connection. Number of sessions for a given meeting does not equal the number of participants.
 
+**Live Meetings vs Past Meetings**
+
+When calling /metrics/meetings, you must specify meeting type: live or past. Live meetings are meetings that are currently happening and do not have an end time or duration yet. All live meetings become past meetings so this script only searches for past meetings.
+
 
 ## API Calls
 
@@ -37,6 +43,6 @@ Each individual instance of a meeting participant entering and exiting a meeting
 | /report/getaccountreport/  | date(s)           |  Active host information, including host ids.   |
 | /meeting/list/             | host ids          |  Meeting series data including topic and series id.  |
 | /metrics/meetings/         | date(s)           |  Meeting instance data, including unique meeting ids but not participant data. |
-| /metrics/meetingdetail/    | unique meeting ids |  All information from /metrics/meetings/ plus detailed participant data. |
+| /metrics/meetingdetail/    | meeting uuids |  All information from /metrics/meetings/ plus detailed participant data. |
 
 meetings.py runs all these calls in order to generate meeting objects with topics and host ids and participant sessions documents
