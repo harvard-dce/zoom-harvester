@@ -30,7 +30,7 @@ Within the series_id, there can be several types:
 
 **`user_id`**
 
-Since only hosts have accounts, most of the time user_id refers to a host. Participants are not required to have accounts and do not log in when they join a meeting but are generated temporary non-unique user_ids."
+Since only hosts have accounts, most of the time user_id refers to a host. Participants do not log in to join meetings, but the zoom api generates a `user_id` for each session. This `user_id` is not unique, it is only unique within a meeting instance.
 
 
 **Sessions / participant sessions**
