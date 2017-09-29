@@ -12,10 +12,10 @@ A python script for fetching Zoom meeting metadata using the Zoom API and loadin
 
 **`meeting_uuid`, `series_id`**
 
-The zoom api uses "meeting id" to refer to ids for both an individual instance of a meeting and a series of meetings. Here, the id for an individual meeting is called `meeting_uuid`, and the id for a series is called `series_id`.
+The zoom api uses "meeting id" to refer to ids for both an individual instance of a meeting and a series of meetings. These are two distinct type of ids. The zoom-harvester differentiates between the two.
 
-- `meeting_uuid` - 24 numbers, letters, and symbols uniquely refering to a meeting instance
-- `series_id` - 9 or 10 digits refering to a series of meetings
+- `meeting_uuid` 24 numbers, letters, and symbols uniquely refering to a meeting instance
+- `series_id` 9 or 10 digits refering to a series of meetings
 
 **`'type': 2`**
 
