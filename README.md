@@ -12,7 +12,7 @@ A python script for fetching Zoom meeting metadata using the Zoom API and loadin
 
 **Meeting ids: meeting_uuid, series_id**
 
-To Zoom, meeting means both an individual instance of a meeting and a series of meetings. There are unique ids for each meeting instance, and series ids that can remain static for a series of reoccuring meetings. The Zoom API docmentation refers to both types of ids as "meeting id". We will to the id for an individual meeting as _meeting_uuid_, and the id for a series as _series_id_.
+To Zoom, meeting means both an individual instance of a meeting and a series of meetings. There are unique ids for each meeting instance, and series ids that can remain static for a series of reoccuring meetings. The Zoom API docmentation refers to both types of ids as "meeting id". Here, the id for an individual meeting is called _meeting_uuid_, and the id for a series is called _series_id_.
 
 **Meeting types: live vs past**
 
