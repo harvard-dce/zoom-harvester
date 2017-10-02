@@ -51,3 +51,48 @@ meetings.py runs all these calls in order to generate meeting objects with topic
 | /meeting/list/             | host ids          |  Meeting series data including topic and series id.  |
 | /metrics/meetings/         | date(s)           |  Meeting instance data, including unique meeting ids but not participant data. |
 | /metrics/meetingdetail/    | meeting uuids |  All information from /metrics/meetings/ plus detailed participant data. |
+
+## Development
+
+A local development environment will need at least an instance of elasticsearch into which the zoom data can be indexed and inspected.
+The easiest way to get a test instance of Elasticsearch running is via docker & docker-compose. 
+
+### Setup
+
+1. Install docker via the instructions for you OS at https://docker.com
+1. Install docker-compose via `pip install docker-compose`
+
+The `docker-compose.yml` config file will initialize two services: elasticsearch & kibana. To bring up the services run `docker-compose up`. The two containers will be started with their stdout directed to the console. To quit use `Ctrl+c`.
+
+### kopf plugin
+
+Kibana should be sufficient for browsing and searching indexes, but the kopf plugin can also be useful for performing operations on the cluster and getting additional details. The steps to install are:
+
+1. In a separate terminal get the container id for the elasticsearch service by running `docker ps`.
+1. Install the plugin via `docker exec -t -i [container-id] bin/plugin install lmenezes/elasticsearch-kopf`
+
+The plugin should persist even after quitting the `docker-compose` process and then re-running `docker-compose up`. Should you remove the actual containers (e.g. `docker-compose down`) you will need to reinstall kopf.
+
+Try indexing a document to make sure things are working
+
+    curl -XPUT "http://localhost:9200/movies/movie/1" -d'
+    {
+        "title": "The Godfather",
+        "director": "Francis Ford Coppola",
+        "year": 1972
+    }'
+    
+Go to [http://localhost:9200/_plugin/kopf]() to confirm that the `movies` index was created with 1 doc
+
+Stop the container and start it again (remember to reinstall kopf), and check that the `movies` index is still there.
+
+To delete the test `movies` index run `curl -XDELETE "http://localhost:9200/movies"`
+
+### index templates
+
+Index templates define the settings for newly created indexes that match a particular name pattern. They need to be created prior to any document indexing. Similar to ES plugins, they need to be recreated if/when the elasticsearch service container is ever removed.
+
+To create the two index templates for the zoom data:
+
+    curl -XPUT "http://localhost:9200/_template/sessions" -d @index_templates/sessions.json
+    curl -XPUT "http://localhost:9200/_template/meetings" -d @index_templates/meetings.json
