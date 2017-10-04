@@ -25,12 +25,13 @@ class ZoomApiException(Exception):
     pass
 
 
-def fetch_records(report_url, params, wait=1):
-    print("get", report_url, "\nparams", params)
-
-    pages = []
+def fetch_records(report_url, params, listkey, wait=1):
+    params = params.copy()
+    records = []
+    print("get", report_url)
 
     while True:
+        print("params", params)
 
         r = requests.post(url=API_BASE_URL + report_url, data=params)
         r.raise_for_status()
@@ -39,17 +40,23 @@ def fetch_records(report_url, params, wait=1):
         if 'error' in response.keys():
             raise ZoomApiException(response['error'])
 
-        pages.append(response)
+        [records.append(record) for record in response[listkey]]
 
-        remaining_pages = response['page_count'] - response['page_number']
+        if 'total_records' in response.keys():
+            if len(records) >= response['total_records']:
+                break
+        elif 'participants_count' in response.keys():
+            if len(records) >= response['participants_count']:
+                break
 
-        if remaining_pages > 0:
-            params['page_number'] += 1
-            time.sleep(wait)
-        else:
+        time.sleep(wait)
+
+        if response['page_number'] >= response['page_count']:
             break
 
-    return pages
+        params['page_number'] += 1
+
+    return records
 
 
 def get_active_hosts(date):
@@ -62,13 +69,9 @@ def get_active_hosts(date):
         'page_number': 1
     }
 
-    pages = fetch_records("/report/getaccountreport", params)
+    hosts = fetch_records("/report/getaccountreport", params, 'users')
 
-    active_host_ids = []
-
-    for page in pages:
-        for user in page['users']:
-            active_host_ids.append(user['user_id'])
+    active_host_ids = [host['user_id'] for host in hosts]
 
     return active_host_ids
 
@@ -87,20 +90,23 @@ def get_series_info(host_ids):
 
         params['host_id'] = host_id
 
-        pages = fetch_records("/meeting/list", params)
+        series = fetch_records("/meeting/list", params, 'meetings')
 
-        for page in pages:
-            for meeting in page['meetings']:
-                key = meeting['id']
-                series_info[key] = {'host_id': meeting['host_id'],
-                                    'topic': meeting['topic']}
+        for meeting in series:
+            key = meeting['id']
+            series_info[key] = {'host_id': meeting['host_id'],
+                                'topic': meeting['topic']}
 
         time.sleep(1)
 
     return series_info
 
 
-def get_meeting_uuids(date, key, secret):
+def get_meetings(date, key, secret):
+    es = Elasticsearch([ES_HOST])
+    host_ids = get_active_hosts(date)
+    series_info = get_series_info(host_ids)
+
     params = {
         'from': date,
         'to': date,
@@ -111,21 +117,33 @@ def get_meeting_uuids(date, key, secret):
         'page_number': 1
     }
 
-    pages = fetch_records("/metrics/meetings", params, wait=60)  # 1 min rate limit
+    meetings = fetch_records("/metrics/meetings", params, 'meetings', wait=60)  # 1 min rate limit
 
-    meeting_uuids = []
+    for meeting in meetings:
 
-    for page in pages:
-        for meeting in page['meetings']:
-            meeting_uuids.append(meeting['uuid'])
+        topic = ""
+        host_id = ""
 
-    return meeting_uuids
+        series_id = meeting['id']
+        if series_id in series_info.keys():
+            topic = series_info[series_id]['topic']
+            host_id = series_info[series_id]['host_id']
+
+        meeting_doc = create_meeting_document(meeting, topic, host_id)
+
+        es.index(
+            index="meetings",
+            doc_type="meeting",
+            id=meeting['uuid'],  # unique meeting occurrence id
+            body=meeting_doc
+        )
+
+    return meetings
 
 
-def get_meetings_from(date, key, secret):
+def get_sessions_from(date, key, secret):
     es = Elasticsearch([ES_HOST])
     url = "/metrics/meetingdetail"
-    meetings = []
     participant_sessions = []
 
     params = {
@@ -136,41 +154,23 @@ def get_meetings_from(date, key, secret):
         'page_number': 1
     }
 
-    host_ids = get_active_hosts(date)
-    series_info = get_series_info(host_ids)
-    meeting_uuids = get_meeting_uuids(date, key, secret)
+    meetings = get_meetings(date, key, secret)
 
-    for meeting_uuid in meeting_uuids:
-        params['meeting_id'] = meeting_uuid
-        pages = fetch_records(url, params)
-        topic = ""
-        host_id = ""
+    for meeting in meetings:
+        uuid = meeting['uuid']
+        params['meeting_id'] = uuid
+        sessions = fetch_records(url, params, 'participants')
 
-        series_id = pages[0]['id']
-        if series_id in series_info.keys():
-            topic = series_info[series_id]['topic']
-            host_id = series_info[series_id]['host_id']
-
-        document = create_meeting_document(pages[0], topic, host_id)
-        meetings.append(document)
-        es.index(
-            index="meetings",
-            doc_type="meeting",
-            id=meeting_uuid,  # unique meeting occurrence id
-            body=document
-        )
-
-        for page in pages:
-            for session in page['participants']:
-                document = create_sessions_document(session, meeting_uuid)
-                participant_sessions.append(document)
-                unique_session_id = meeting_uuid + session['user_id']
-                es.index(
-                    index="sessions",
-                    doc_type="session",
-                    id=unique_session_id,
-                    body=document
-                )
+        for session in sessions:
+            document = create_sessions_document(session, uuid)
+            participant_sessions.append(document)
+            unique_session_id = uuid + session['user_id']
+            es.index(
+                index="sessions",
+                doc_type="session",
+                id=unique_session_id,
+                body=document
+            )
 
         time.sleep(1)
     
@@ -191,7 +191,7 @@ def create_meeting_document(meeting, topic, host_id):
         "start_time": meeting['start_time'],
         "end_time": meeting['end_time'],
         "duration": to_seconds(meeting['duration']),
-        "participant_sessions": len(meeting['participants']),  # not unique participants
+        "participant_sessions": meeting['participants'],  # not unique participants
         "has_pstn": meeting['has_pstn'],
         "has_voip": meeting['has_voip'],
         "has_3rd_party_audio": meeting['has_3rd_party_audio'],
@@ -254,7 +254,7 @@ def main(args):
 
     try:
         with open_destination(args.destination) as fh:
-            meetings = get_meetings_from(args.date, args.key, args.secret)
+            meetings = get_sessions_from(args.date, args.key, args.secret)
             json.dump(meetings, fh, indent=2)
     except OSError as e:
         print("Destination error: %s" % str(e))
