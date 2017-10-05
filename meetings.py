@@ -11,6 +11,7 @@ from datetime import timedelta
 from os import getenv
 from os.path import dirname, join
 from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk as index_bulk
 
 from dotenv import load_dotenv
 load_dotenv(join(dirname(__file__), '.env'))
@@ -20,12 +21,17 @@ SECRET = getenv('ZOOM_SECRET')
 API_BASE_URL = "https://api.zoom.us/v1"
 ES_HOST = getenv('ES_HOST')
 
+import logging
+logging.basicConfig()
+
+logger = logging.getLogger()
+
 
 class ZoomApiException(Exception):
     pass
 
 
-def fetch_records(report_url, params, listkey, wait=1):
+def fetch_records(report_url, params, listkey, countkey='total_records', wait=1):
     params = params.copy()
     records = []
     print("get", report_url)
@@ -40,14 +46,10 @@ def fetch_records(report_url, params, listkey, wait=1):
         if 'error' in response.keys():
             raise ZoomApiException(response['error'])
 
-        [records.append(record) for record in response[listkey]]
+        records.extend([record for record in response[listkey]])
 
-        if 'total_records' in response.keys():
-            if len(records) >= response['total_records']:
-                break
-        elif 'participants_count' in response.keys():
-            if len(records) >= response['participants_count']:
-                break
+        if len(records) >= response[countkey]:
+            break
 
         time.sleep(wait)
 
@@ -93,9 +95,19 @@ def get_series_info(host_ids):
         series = fetch_records("/meeting/list", params, 'meetings')
 
         for meeting in series:
-            key = meeting['id']
-            series_info[key] = {'host_id': meeting['host_id'],
-                                'topic': meeting['topic']}
+            meeting_id = meeting['id']
+
+            # this shouldn't happen
+            if meeting_id in series_info:
+                logger.warning(
+                    "Different host_id (%s) returned same meeting (%s)",
+                    host_id, meeting_id
+                )
+
+            series_info[meeting_id] = {
+                'host_id': meeting['host_id'],
+                'topic': meeting['topic']
+            }
 
         time.sleep(1)
 
@@ -103,7 +115,7 @@ def get_series_info(host_ids):
 
 
 def get_meetings(date, key, secret):
-    es = Elasticsearch([ES_HOST])
+
     host_ids = get_active_hosts(date)
     series_info = get_series_info(host_ids)
 
@@ -123,26 +135,17 @@ def get_meetings(date, key, secret):
 
         topic = ""
         host_id = ""
-
         series_id = meeting['id']
-        if series_id in series_info.keys():
+
+        if series_id in series_info:
             topic = series_info[series_id]['topic']
             host_id = series_info[series_id]['host_id']
 
-        meeting_doc = create_meeting_document(meeting, topic, host_id)
-
-        es.index(
-            index="meetings",
-            doc_type="meeting",
-            id=meeting['uuid'],  # unique meeting occurrence id
-            body=meeting_doc
-        )
-
-    return meetings
+        yield create_meeting_document(meeting, topic, host_id)
 
 
 def get_sessions_from(date, key, secret):
-    es = Elasticsearch([ES_HOST])
+
     url = "/metrics/meetingdetail"
     participant_sessions = []
 
@@ -154,32 +157,23 @@ def get_sessions_from(date, key, secret):
         'page_number': 1
     }
 
-    meetings = get_meetings(date, key, secret)
+    for meeting_doc in get_meetings(date, key, secret):
 
-    for meeting in meetings:
-        uuid = meeting['uuid']
+        uuid = meeting_doc['uuid']
         params['meeting_id'] = uuid
-        sessions = fetch_records(url, params, 'participants')
+        sessions = fetch_records(url, params, 'participants',
+                                 countkey='participants_count')
 
-        for session in sessions:
-            document = create_sessions_document(session, uuid)
-            participant_sessions.append(document)
-            unique_session_id = uuid + session['user_id']
-            es.index(
-                index="sessions",
-                doc_type="session",
-                id=unique_session_id,
-                body=document
-            )
+        session_docs = [create_sessions_document(session, uuid)
+                        for session in sessions]
 
-        time.sleep(1)
-    
-    return meetings, participant_sessions
+        yield meeting_doc, session_docs
 
 
 def create_meeting_document(meeting, topic, host_id):
 
     doc = {
+        "uuid": meeting['uuid'],
         "meeting_series_id": meeting['id'],
         "topic": topic,
         "host": {
@@ -226,19 +220,6 @@ def create_sessions_document(session, meeting_uuid):
     return doc
 
 
-@contextlib.contextmanager
-def open_destination(destination=None):
-    if destination == "-":
-        fh = sys.stdout
-    else:
-        fh = open(destination, "w")
-    try:
-        yield fh
-    finally:
-        if fh is not sys.stdout:
-            fh.close()
-
-
 # convert duration from MM:SS or HH:MM:SS to seconds
 def to_seconds(duration):
     try:
@@ -252,10 +233,43 @@ def to_seconds(duration):
 
 def main(args):
 
+    logger.setLevel(getattr(logging, args.log_level.upper()))
+
+    if args.destination == 'index':
+        try:
+            es = Elasticsearch([ES_HOST])
+            assert es.info()
+        except Exception:
+            logger.error(
+                "Connection to Elasticsearch at %s failed", ES_HOST
+            )
+            return
+
     try:
-        with open_destination(args.destination) as fh:
-            meetings = get_sessions_from(args.date, args.key, args.secret)
-            json.dump(meetings, fh, indent=2)
+        meeting_data = get_sessions_from(args.date, args.key, args.secret)
+
+        for meeting_doc, session_docs in meeting_data:
+            if args.destination == 'index':
+                es.index(
+                    index="meetings",
+                    doc_type="meeting",
+                    body=meeting_doc,
+                    id=meeting_doc['uuid']
+                )
+                session_actions = [
+                    dict(
+                        _index='sessions',
+                        _type='session',
+                        _id=s['meeting'] + s['user_id'],
+                        **s
+                    ) for s in session_docs
+                ]
+                index_bulk(es, session_actions)
+            else:
+                print(json.dumps(meeting_doc))
+                for s in session_docs:
+                    print(json.dumps(s))
+
     except OSError as e:
         print("Destination error: %s" % str(e))
     except requests.HTTPError as e:
@@ -269,11 +283,18 @@ def main(args):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--key", help="zoom api key", default=KEY)
-    parser.add_argument("--secret", help="zoom api secret", default=SECRET)
-    parser.add_argument("--date", help="fetch meetings from this date")
-    parser.add_argument("--destination", help="destination filename", default="-")
-    parser.add_argument("--es_host", help="Elasticsearch host:port", default=ES_HOST)
+    parser.add_argument("--key", default="KEY",
+                        help="zoom api key; defaults to $ZOOM_KEY")
+    parser.add_argument("--secret", default=SECRET,
+                        help="zoom api secret; defaults to $ZOOM_SECRET")
+    parser.add_argument("--date",
+                        help="fetch meetings from this date, e.g. YYYY-mm-dd; defaults to yesterday.")
+    parser.add_argument("--destination", help="destination filename; defaults to 'index'",
+                        choices=['index','stdout'], default="index")
+    parser.add_argument("--es_host", default=ES_HOST,
+                        help="Elasticsearch host:port; defaults to $ES_HOST")
+    parser.add_argument("--log_level", default="info", help="set logging level; defaults to 'info'",
+                        choices=['info','warn','debug'])
     args = parser.parse_args()
 
     if args.date is None:
