@@ -8,6 +8,32 @@ A python script for fetching Zoom meeting metadata using the Zoom API and loadin
 
 [Zoom API Playground](https://developer.zoom.us/playground/)
 
+## Usage
+
+    usage: meetings.py [-h] [--key KEY] [--secret SECRET] [--date DATE]
+                       [--destination {index,stdout}] [--es_host ES_HOST]
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      --key KEY             zoom api key; defaults to $ZOOM_KEY
+      --secret SECRET       zoom api secret; defaults to $ZOOM_SECRET
+      --date DATE           fetch meetings from this date, e.g. YYYY-mm-dd; defaults to yesterday.
+      --destination {index,stdout}
+                            destination filename; defaults to 'index'
+      --es_host ES_HOST     Elasticsearch host:port; defaults to $ES_HOST
+      --log_level {info,warn,debug}
+                            set logging level; defaults to 'info'
+
+##### Example to retrieve & index all meeting & participant data from yesterday.
+
+`./meetings.py --key [KEY] --secret [SECRET] --es_host localhost:9200`
+
+##### Using the `.env` file
+
+To avoid entering key, secret, etc, on the command line copy `example.env` to `.env` in the
+project directory and fill in the values. The script will load them into the environment at
+runtime and use as the command line arg defaults.
+
 ## Terms
 
 **`meeting_uuid`, `series_id`**
